@@ -10,7 +10,7 @@
         margin: 0; padding: 20px;
     }
     .container {
-        max-width: 600px;
+        max-width: 700px;
         margin: auto;
         background: #fff;
         padding: 20px;
@@ -49,6 +49,47 @@
         color: #008000;
         margin-top: 10px;
     }
+    .indicator {
+        margin-top: 10px;
+        font-size: 14px;
+    }
+    .bar-container {
+        display: flex;
+        height: 20px;
+        margin-top: 5px;
+        border-radius: 5px;
+        overflow: hidden;
+        background: #ddd;
+    }
+    .bar {
+        height: 100%;
+    }
+    .uppercase { background: #007bff; }
+    .lowercase { background: #28a745; }
+    .numbers { background: #ffc107; }
+    .symbols { background: #dc3545; }
+    .strength-meter {
+        height: 15px;
+        border-radius: 5px;
+        margin-top: 5px;
+        background: #ddd;
+        overflow: hidden;
+    }
+    .strength-bar {
+        height: 100%;
+        text-align: center;
+        color: white;
+        font-size: 12px;
+        line-height: 15px;
+        font-weight: bold;
+    }
+    .explanation {
+        margin-top: 10px;
+        font-size: 14px;
+        background: #fff5e6;
+        padding: 10px;
+        border-radius: 5px;
+    }
 </style>
 </head>
 <body>
@@ -68,6 +109,17 @@
 </div>
 
 <script>
+// Count character types
+function countCharTypes(password) {
+    return {
+        uppercase: (password.match(/[A-Z]/g) || []).length,
+        lowercase: (password.match(/[a-z]/g) || []).length,
+        numbers: (password.match(/[0-9]/g) || []).length,
+        symbols: (password.match(/[^A-Za-z0-9]/g) || []).length,
+        length: password.length
+    };
+}
+
 // Estimate charset size
 function estimateCharsetSize(password) {
     let charset = 0;
@@ -90,11 +142,9 @@ function effectiveEntropy(password) {
     let entropy = theoreticalEntropy(len, charsetSize);
     let penalty = 0;
 
-    // 1. Repeated characters
     const repeats = password.length - new Set(password).size;
     penalty += repeats * 1.0;
 
-    // 2. Runs of same category
     let run = 1;
     for (let i = 1; i < password.length; i++) {
         const sameCategory =
@@ -109,16 +159,53 @@ function effectiveEntropy(password) {
             run = 1;
         }
     }
-    // final run
     if (run === 2) penalty += 0.5;
     if (run >= 3) penalty += 2 + (run - 3) * 0.5;
 
-    // 3. Symbol usage penalty
     const symbols = password.match(/[^A-Za-z0-9]/g)?.length || 0;
     if (symbols === 0) penalty += 5;
     else if (symbols === 1) penalty += 2;
 
     return entropy - penalty;
+}
+
+// Generate colored composition bar
+function generateBar(counts) {
+    const total = counts.uppercase + counts.lowercase + counts.numbers + counts.symbols;
+    if (total === 0) return '';
+
+    const uc = (counts.uppercase/total*100).toFixed(1);
+    const lc = (counts.lowercase/total*100).toFixed(1);
+    const num = (counts.numbers/total*100).toFixed(1);
+    const sym = (counts.symbols/total*100).toFixed(1);
+
+    return `
+    <div class="bar-container">
+        <div class="bar uppercase" style="width:${uc}%;"></div>
+        <div class="bar lowercase" style="width:${lc}%;"></div>
+        <div class="bar numbers" style="width:${num}%;"></div>
+        <div class="bar symbols" style="width:${sym}%;"></div>
+    </div>
+    <div class="indicator">
+        Uppercase: ${counts.uppercase}, Lowercase: ${counts.lowercase}, Numbers: ${counts.numbers}, Symbols: ${counts.symbols}, Length: ${counts.length}
+    </div>
+    `;
+}
+
+// Generate strength meter
+function generateStrengthMeter(entropy) {
+    let label = "", color = "", pct = Math.min(entropy, 128)/128*100;
+    if (entropy < 28) { label="Very Weak"; color="#dc3545"; }
+    else if (entropy < 36) { label="Weak"; color="#ff6f00"; }
+    else if (entropy < 60) { label="Moderate"; color="#ffc107"; }
+    else if (entropy < 128) { label="Strong"; color="#28a745"; }
+    else { label="Very Strong"; color="#007bff"; }
+
+    return `
+    <div class="strength-meter">
+        <div class="strength-bar" style="width:${pct}%;background:${color}">${label}</div>
+    </div>
+    `;
 }
 
 // Compare two passwords
@@ -135,14 +222,27 @@ function comparePasswords() {
     const e1 = effectiveEntropy(pw1);
     const e2 = effectiveEntropy(pw2);
 
-    let stronger;
-    if (e1 > e2) stronger = "Password 1 is stronger.";
-    else stronger = "Password 2 is stronger."; // guarantees exactly one winner
+    const counts1 = countCharTypes(pw1);
+    const counts2 = countCharTypes(pw2);
+
+    let stronger, explanation;
+    if (e1 > e2) {
+        stronger = "Password 1 is stronger.";
+        explanation = `Password 1 has higher effective entropy by ${(e1-e2).toFixed(2)} bits.\nBetter mix of character types and/or longer length.`;
+    } else {
+        stronger = "Password 2 is stronger.";
+        explanation = `Password 2 has higher effective entropy by ${(e2-e1).toFixed(2)} bits.\nBetter mix of character types and/or longer length.`;
+    }
 
     output.innerHTML =
-        "Password 1 Effective Entropy: " + e1.toFixed(2) + " bits\n" +
-        "Password 2 Effective Entropy: " + e2.toFixed(2) + " bits\n\n" +
-        "<div class='stronger'>" + stronger + "</div>";
+        `<b>Password 1 Effective Entropy:</b> ${e1.toFixed(2)} bits` +
+        generateBar(counts1) +
+        generateStrengthMeter(e1) +
+        `<b>Password 2 Effective Entropy:</b> ${e2.toFixed(2)} bits` +
+        generateBar(counts2) +
+        generateStrengthMeter(e2) +
+        `<div class='stronger'>${stronger}</div>` +
+        `<div class='explanation'><b>Why:</b> ${explanation}</div>`;
 }
 </script>
 
