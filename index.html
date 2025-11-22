@@ -1,41 +1,150 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Compare Password Strength</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>Password Strength Comparator</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f6f8;
+        margin: 0; padding: 20px;
+    }
+    .container {
+        max-width: 600px;
+        margin: auto;
+        background: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px #0002;
+    }
+    input {
+        width: 100%;
+        padding: 10px;
+        margin-top: 5px;
+        margin-bottom: 20px;
+        font-size: 16px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+    }
+    button {
+        padding: 10px 20px;
+        font-size: 16px;
+        border: none;
+        border-radius: 5px;
+        background: #007bff;
+        color: white;
+        cursor: pointer;
+    }
+    button:hover { background: #0056b3; }
+    .result-box {
+        background: #eef3ff;
+        padding: 15px;
+        border-radius: 6px;
+        white-space: pre-wrap;
+        margin-top: 20px;
+    }
+    .stronger {
+        font-weight: bold;
+        font-size: 18px;
+        color: #008000;
+        margin-top: 10px;
+    }
+</style>
 </head>
 <body>
-  <main class="container">
-    <h1>Compare Password Strength</h1>
 
-    <div class="row">
-      <div class="card">
-        <label for="pw1">Password 1</label>
-        <input id="pw1" type="password" placeholder="Enter first password" />
-        <div id="info1" class="info"></div>
-      </div>
+<div class="container">
+    <h2>Password Strength Comparator</h2>
 
-      <div class="card">
-        <label for="pw2">Password 2</label>
-        <input id="pw2" type="password" placeholder="Enter second password" />
-        <div id="info2" class="info"></div>
-      </div>
-    </div>
+    <label>Enter Password 1:</label>
+    <input id="pw1" type="text">
 
-    <div class="controls">
-      <button id="compare">Compare</button>
-      <button id="swap">Swap</button>
-      <div class="hint">Tip: try mixing upper/lower, digits and symbols.</div>
-    </div>
+    <label>Enter Password 2:</label>
+    <input id="pw2" type="text">
 
-    <section id="result" class="result hidden">
-      <h2>Comparison</h2>
-      <div id="winner" class="winner"></div>
-    </section>
-  </main>
+    <button onclick="comparePasswords()">Compare Passwords</button>
 
-  <script src="script.js"></script>
+    <div id="output" class="result-box"></div>
+</div>
+
+<script>
+// Estimate charset size
+function estimateCharsetSize(password) {
+    let charset = 0;
+    if (/[a-z]/.test(password)) charset += 26;
+    if (/[A-Z]/.test(password)) charset += 26;
+    if (/[0-9]/.test(password)) charset += 10;
+    if (/[^A-Za-z0-9]/.test(password)) charset += 32; // approximate symbol set
+    return charset;
+}
+
+// Theoretical entropy
+function theoreticalEntropy(len, charsetSize) {
+    return len * Math.log2(charsetSize);
+}
+
+// Effective entropy calculation
+function effectiveEntropy(password) {
+    const charsetSize = estimateCharsetSize(password);
+    const len = password.length;
+    let entropy = theoreticalEntropy(len, charsetSize);
+    let penalty = 0;
+
+    // 1. Repeated characters
+    const repeats = password.length - new Set(password).size;
+    penalty += repeats * 1.0;
+
+    // 2. Runs of same category
+    let run = 1;
+    for (let i = 1; i < password.length; i++) {
+        const sameCategory =
+            (/[a-z]/.test(password[i]) && /[a-z]/.test(password[i-1])) ||
+            (/[A-Z]/.test(password[i]) && /[A-Z]/.test(password[i-1])) ||
+            (/[0-9]/.test(password[i]) && /[0-9]/.test(password[i-1])) ||
+            (/[^A-Za-z0-9]/.test(password[i]) && /[^A-Za-z0-9]/.test(password[i-1]));
+        if (sameCategory) run++;
+        else {
+            if (run === 2) penalty += 0.5;
+            if (run >= 3) penalty += 2 + (run - 3) * 0.5;
+            run = 1;
+        }
+    }
+    // final run
+    if (run === 2) penalty += 0.5;
+    if (run >= 3) penalty += 2 + (run - 3) * 0.5;
+
+    // 3. Symbol usage penalty
+    const symbols = password.match(/[^A-Za-z0-9]/g)?.length || 0;
+    if (symbols === 0) penalty += 5;
+    else if (symbols === 1) penalty += 2;
+
+    return entropy - penalty;
+}
+
+// Compare two passwords
+function comparePasswords() {
+    const pw1 = document.getElementById("pw1").value;
+    const pw2 = document.getElementById("pw2").value;
+    const output = document.getElementById("output");
+
+    if (!pw1 || !pw2) {
+        output.textContent = "Please enter both passwords.";
+        return;
+    }
+
+    const e1 = effectiveEntropy(pw1);
+    const e2 = effectiveEntropy(pw2);
+
+    let stronger;
+    if (e1 > e2) stronger = "Password 1 is stronger.";
+    else stronger = "Password 2 is stronger."; // guarantees exactly one winner
+
+    output.innerHTML =
+        "Password 1 Effective Entropy: " + e1.toFixed(2) + " bits\n" +
+        "Password 2 Effective Entropy: " + e2.toFixed(2) + " bits\n\n" +
+        "<div class='stronger'>" + stronger + "</div>";
+}
+</script>
+
 </body>
 </html>
